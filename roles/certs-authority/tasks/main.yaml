@@ -1,0 +1,92 @@
+---
+# Playbook to ensure Certificate Authority is properly configured
+
+- name: ensure we certify the right node
+  set_fact:
+    host_to_certify:      "{{ item | default( inventory_hostname ) }}"
+
+- name: ensure certificate directory exists
+  file:
+    path:             "{{ certs_directory }}"
+    state:            directory
+    mode:             0755
+
+########## private key management
+- name: upload CA private key if it's passed as parameter ca_privatekey_filepath=
+  when:               ca_privatekey_filepath is defined
+  copy:
+    directory_mode:   0755
+    src:              "{{ ca_privatekey_filepath }}"
+    dest:             "{{ certs_directory }}{{ master_role }}-CA.privatekey.key"
+
+- name: checking if the Certificate Authority private key exists on the server
+  when:               ca_privatekey_filepath is undefined
+  stat:
+    path:             "{{ certs_directory }}{{ master_role }}-CA.privatekey.key"
+  register:           ca_privatekey_exist
+
+- name: if not, checking if the Certificate Authority private key exists locally in ./config/data
+  when:               ca_privatekey_filepath is undefined and ca_privatekey_exist.stat.exists == False
+  local_action:       stat path="config/data/{{ master_role }}-CA.privatekey.key"
+  register:           ca_privatekey_existlocally
+
+- name: upload local CA private key if it's only there locally
+  when:               ca_privatekey_filepath is undefined and ca_privatekey_exist.stat.exists == False and ca_privatekey_existlocally.stat.exists == True
+  copy:
+    directory_mode:   0755
+    src:              "config/data/{{ master_role }}-CA.privatekey.key"
+    dest:             "{{ certs_directory }}{{ master_role }}-CA.privatekey.key"
+
+#openssl genrsa -out ~/ca-key.crt 2048
+- name: generate a CA private key if none is found anywhere
+  when:               ca_privatekey_filepath is undefined and ca_privatekey_exist.stat.exists == False and ca_privatekey_existlocally.stat.exists == False
+  shell:              "openssl genrsa -out {{ certs_directory }}{{ master_role }}-CA.privatekey.key {{ key_size }}"
+
+########## public key management
+- name: checking if the Certificate Authority public key exists on the server
+  when:               ca_publickey_filepath is undefined
+  stat:
+    path:             "{{ certs_directory }}{{ master_role }}-CA.publickey.crt"
+  register:           ca_publickey_exist
+
+- name: if not, checking if the Certificate Authority public key exists locally in ./config/data
+  when:               ca_publickey_filepath is undefined and ca_publickey_exist.stat.exists == False
+  local_action:       stat path="config/data/{{ master_role }}-CA.publickey.crt"
+  register:           ca_publickey_existlocally
+
+- name: upload local CA public key if it's only there locally
+  when:               ca_publickey_filepath is undefined and ca_publickey_exist.stat.exists == False and ca_publickey_existlocally.stat.exists == True
+  copy:
+    directory_mode:   0755
+    src:              "config/data/{{ master_role }}-CA.publickey.crt"
+    dest:             "{{ certs_directory }}{{ master_role }}-CA.publickey.crt"
+
+#openssl req -x509 -new -nodes -key ~/.docker/ca-key.crt -days 10000 -out ~/.docker/ca.crt -subj '/CN=docker-CA'
+- name: generate a CA public key if none is found anywhere
+  when:               ca_publickey_filepath is undefined and ca_publickey_exist.stat.exists == False and ca_publickey_existlocally.stat.exists == False
+  shell:              "openssl req -x509 -new -nodes -key {{ certs_directory }}{{ master_role }}-CA.privatekey.key \
+                        -days 10000 \
+                        -out {{ certs_directory }}{{ master_role }}-CA.publickey.crt \
+                        -subj '/CN={{ master_role }}-CA'"
+
+- name: adding this node as a Certificate Authority
+  #no_log:                         true
+  add_host:
+    name:                         "{{ inventory_hostname }}"
+    groups:                       "certs-authority"
+
+- name: the current node is a Certificate Authority (it possess the CA private key)
+  debug:
+    msg:                          "node ID : {{ inventory_hostname }}"
+
+- name: save the CA private key (certificate) locally
+  fetch:
+    flat:                         yes
+    src:                          "{{ certs_directory }}{{ master_role }}-CA.privatekey.key"
+    dest:                         config/data/
+
+- name: save the CA publick key (certificate) locally
+  fetch:
+    flat:                         yes
+    src:                          "{{ certs_directory }}{{ master_role }}-CA.publickey.crt"
+    dest:                         config/data/

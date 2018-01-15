@@ -1,0 +1,61 @@
+---
+# Playbook to ensure bastion host is configured and hardened
+
+#we're choosing the last public node
+- name: set bastion host index in public_nodes group
+  set_fact:
+    bastion_public_nodes_idx: "{{ ( ( groups[ 'public_nodes' ]  | length ) - 1 ) }}"
+
+- name: set bastion host
+  set_fact:
+    bastion_host:             "{{ groups[ 'public_nodes' ][ bastion_public_nodes_idx | int ] }}"
+
+- name: set bastion host public IP
+  set_fact:
+    bastion_host_publicip:    "{{ hostvars[ bastion_host ].publicIPv4 }}"
+
+- name: set bastion host private IP
+  set_fact:
+    bastion_host_privateip:   "{{ hostvars[ bastion_host ].privateIPv4 }}"
+
+# - name: add a bastion user to bastion host
+#   connection:         groups[ 'public_nodes' ][ 0 ]
+#   user:
+#     name:             bastion
+#     ssh_key_file:     "{{ ansible_ssh_private_key_file }}"
+
+- name: configure SSH bastion
+  when:                       inventory_hostname == 'localhost'
+  with_items:                 bastion_host
+  blockinfile:
+    create:                   yes
+    dest:                     "./config/data/{{ master_role }}-ssh_config"
+    marker:                   "#{mark} BASTION"
+    block: |
+                              Host {{ bastion_host_publicip }}
+                                IdentityFile {{ ansible_ssh_private_key_file }}
+                                PasswordAuthentication no
+                                ForwardAgent yes
+                                ServerAliveInterval 60
+                                TCPKeepAlive yes
+                                ControlMaster auto
+                                ControlPersist 15m
+                                ProxyCommand none
+                                LogLevel QUIET
+
+- name: configure local inbound connection to go through bastion
+  when:                       inventory_hostname == 'localhost'
+  with_items:                 "{{ groups[ 'private_nodes' ] }}"
+  blockinfile:
+    create:                   yes
+    dest:                     "./config/data/{{ master_role }}-ssh_config"
+    marker:                   "#{mark} FORDARDED INSTANCE {{ item }}"
+    block: |
+                              Host {{ hostvars[ item ].privateIPv4 }}
+                                IdentityFile {{ ansible_ssh_private_key_file }}
+                                PasswordAuthentication no
+                                ServerAliveInterval 60
+                                TCPKeepAlive yes
+                                ProxyCommand ssh -q -A {{ ansible_ssh_user }}@{{ bastion_host_publicip }} -i {{ ansible_ssh_private_key_file }} nc %h %p
+                                LogLevel QUIET
+                                StrictHostKeyChecking no

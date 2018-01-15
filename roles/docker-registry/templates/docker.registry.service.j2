@@ -1,0 +1,11 @@
+[Unit]
+Description=Starting docker registry
+
+[Service]
+Environment= MY_ENVIRONMENT_VAR = /opt/registry/docker-compose.yml
+WorkingDirectory=/docker-registry
+ExecStart=/usr/bin/docker-compose up
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

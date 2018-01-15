@@ -1,0 +1,94 @@
+#!/usr/bin/env ansible-playbook -i ./scripts/openstack-inventory.py
+############### An generic playbook to run roles on Openstack ##############
+#
+# you have to pass parameters using -e <PARAM1>=<VALUE1> -e <PARAMS2>=<VALUE2>
+#
+# mandatory parameters:
+#   role=               the role you want to push
+#   os_cloud=           your clouds.yaml cloud profile/account name
+#
+# optional parameters:
+#   node_count=         the total number of node you want to create/maintain
+#   public_node_count=  the number of node you want to be public facing
+#   action=             a non-default action to trigger, can be :
+#                       - delete: the script will then delete all existing instances
+#                       - delete_all: the script will delete instance, local config files and keys in OS
+#                       - delete_all_includinguserkey: the script will wipe keys
+#                           and instances both in OS and locally
+#   key_filename=       explicit SSH key file name to use
+---
+# Generic playbook for Openstack
+- name: "________________________ Cleaning up (if asked) ________________________"
+  connection:                     local
+  hosts:                          localhost
+  vars:
+    master_role:                  "{{ role }}"
+    playbook_name:                "{{ role }}-ansible"
+  vars_files:
+    - config/openstack-config.yaml
+  roles:
+    - { role: inventory,            when: "action is defined and 'delete' in action and action != 'local'" }
+    - { role: inventory-cleanup,    when: "action is defined and 'delete' in action and action != 'local'" }
+
+
+- name: "_____________________ OpenStack instance management ____________________"
+  connection:                     local
+  hosts:                          localhost
+  vars:
+    master_role:                  "{{ role }}"
+    playbook_name:                "{{ role }}-ansible"
+  vars_files:
+    - config/openstack-config.yaml
+    - "roles/{{ role }}/defaults/main.yaml"
+  roles:
+    - { role: inventory,          when: "action is undefined or ( action != 'local' and 'delete' not in action )" }
+    - { role: inventory-keys,     when: "action is undefined or ( action != 'skip_setup' and 'delete' not in action )" }
+    - { role: inventory-instance, when: "action is undefined or ( action != 'skip_setup' and 'delete' not in action )" }
+
+
+
+- name: "____________________ Meta-roles local preparation  _____________________"
+  connection:                     local
+  hosts:                          localhost
+  vars:
+    master_role:                  "{{ role }}"
+    playbook_name:                "{{ role }}-ansible"
+  vars_files:
+    - config/openstack-config.yaml
+    - "roles/{{ role }}/defaults/main.yaml"
+  roles:
+    - { role: inventory,          when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
+    - { role: meta-bastion,       when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
+    - { role: meta-router,        when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
+
+- name: "____________________ Meta-roles remote execution  ______________________"
+  hosts:                          "{{ master_role }}"
+  vars:
+    master_role:                  "{{ role }}"
+    playbook_name:                "{{ role }}-ansible"
+  vars_files:
+    - config/openstack-config.yaml
+    - "roles/{{ role }}/defaults/main.yaml"
+  roles:
+    - { role: inventory,          when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
+    - { role: meta-bastion,       when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
+    - { role: meta-router,        when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
+
+
+
+- name:  "______________________ {{ role }} role execution ______________________"
+  hosts:                          "{{ master_role }}"
+  vars:
+    master_role:                  "{{ role }}"
+    playbook_name:                "{{ role }}-ansible"
+  vars_files:
+    - config/openstack-config.yaml
+  roles:
+    - inventory
+    - "{{ role }}"
+  tasks:
+  - name: Merge the two lists
+    set_fact:
+      lists_merged: "{{( 'inventory' + role ) | list }}"
+  - name: Demonstrate merged lists
+    debug: var="{{ lists_merged }}"

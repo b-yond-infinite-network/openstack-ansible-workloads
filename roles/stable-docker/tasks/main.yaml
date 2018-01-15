@@ -1,0 +1,92 @@
+---
+# Playbook to ensure docker is installed
+
+- name: update apt repo
+  apt:            update_cache=yes
+  register:       apt_result
+  until:          apt_result|success
+  retries:        3
+  delay:          30
+  ignore_errors:  yes
+  become:         yes
+
+- name: retry if needed using command apt-get update
+  command:        apt-get update
+  when:           apt_result|failed
+  become:         yes
+
+- name: install Docker
+  apt:            pkg={{ item }} state=installed
+  register:       apt_result
+  until:          apt_result|success
+  retries:        3
+  delay:          30
+  ignore_errors:  yes
+  become:         yes
+  notify:         ensure Docker is up
+  with_items:
+    - docker.io
+    - docker-compose
+  when:           not 'delete' in action
+
+- name: adding docker group
+  group:
+    name:         docker
+    state:        present
+
+- name: adding docker user
+  user:
+    name:         docker
+    groups:       docker
+    append:       yes
+
+- name: adding root user to group docker
+  user:
+    name:         root
+    groups:       docker
+    append:       yes
+
+- name: install pip
+  apt:            pkg=python-pip state=installed
+  register:       apt_result
+  until:          apt_result|success
+  retries:        3
+  delay:          30
+  ignore_errors:  yes
+  become:         yes
+
+- name: upgrade pip
+  shell:          pip install --upgrade pip
+  register:       pip_upgrade
+  until:          pip_upgrade|success
+  retries:        3
+  delay:          15
+  ignore_errors:  yes
+  when:           groups.private_nodes is undefined or inventory_hostname not in groups[ 'private_nodes' ]
+
+- name: install python docker lib
+  shell:          pip install docker-py
+  register:       pip_result
+  until:          pip_result|success
+  retries:        3
+  delay:          15
+  ignore_errors:  yes
+  when:           groups.private_nodes is undefined or inventory_hostname not in groups[ 'private_nodes' ]
+
+- name: upgrade pip on private hosts
+  shell:          pip install --upgrade pip --proxy "{{ proxy_host_privateip }}:{{ proxy_http_port }}"
+  register:       pip_upgrade
+  until:          pip_upgrade|success
+  retries:        3
+  delay:          15
+  ignore_errors:  yes
+  when:           groups.private_nodes is defined and inventory_hostname in groups[ 'private_nodes' ]
+
+- name: install python docker lib on private hosts
+  shell:          pip install docker-py --proxy "{{ proxy_host_privateip }}:{{ proxy_http_port }}"
+  register:       pip_result
+  until:          pip_result|success
+  retries:        3
+  delay:          15
+  ignore_errors:  yes
+  when:           groups.private_nodes is defined and inventory_hostname in groups[ 'private_nodes' ]

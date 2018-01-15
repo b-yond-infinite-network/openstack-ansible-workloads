@@ -1,0 +1,113 @@
+---
+# Playbook to manage OpenStack inventory
+
+- name: gathering OpenStack instance facts
+  connection:                     local
+  os_server_facts:
+    cloud:                        "{{ os_cloud_name }}"
+    server:                       "{{ os_instancename_prefix }}*"
+  register:                       gathered_os_instance_list
+
+- name: gather networks (LAN and WAN) information
+  no_log:                         true
+  connection:                     local
+  os_networks_facts:
+    cloud:                        "{{ os_cloud_name }}"
+
+- name: store public network (WAN) information
+  no_log:                         true
+  connection:                     local
+  with_items:                     "{{ openstack_networks }}"
+  when:                           "'WAN' in item.name"
+  set_fact:
+    os_cloud_publicnetwork:       "{{ item }}"
+
+- name: store public network (WAN) name
+  set_fact:
+    os_cloud_publicnetwork_name:  "{{ os_cloud_publicnetwork.name }}"
+
+- name: store public network (WAN) ID
+  set_fact:
+    os_cloud_publicnetwork_id:   "{{ os_cloud_publicnetwork.id }}"
+
+- name: store public subnet (WAN) ID
+  set_fact:
+    os_cloud_publicsubnet_id:     "{{ os_cloud_publicnetwork.subnets[ 0 ] }}"
+
+- name: gather facts about the public network (WAN) subnets
+  connection:                     local
+  os_subnets_facts:
+    cloud:                        "{{ os_cloud_name }}"
+    filters:
+      id:                         "{{ os_cloud_publicsubnet_id }}"
+
+- name: store public subnet (WAN) cidr as fact
+  set_fact:
+    os_cloud_publicsubnet_cidr:   "{{ openstack_subnets[ 0 ].cidr }}"
+
+- name: store private subnet (WAN) gateway IP as fact
+  set_fact:
+    os_cloud_publicsubnet_gateway: "{{ openstack_subnets[ 0 ].gateway_ip }}"
+
+- name: store private network (LAN) information
+  no_log:                         true
+  connection:                     local
+  with_items:                     "{{ openstack_networks }}"
+  when:                           "'LAN' in item.name"
+  set_fact:
+    os_cloud_privatenetwork:      "{{ item }}"
+
+- name: store private network (LAN) name
+  set_fact:
+    os_cloud_privatenetwork_name:  "{{ os_cloud_privatenetwork.name }}"
+
+- name: store private network (LAN) ID
+  set_fact:
+    os_cloud_privatenetwork_id:   "{{ os_cloud_privatenetwork.id }}"
+
+- name: store private subnet (LAN) ID
+  set_fact:
+    os_cloud_privatesubnet_id:    "{{ os_cloud_privatenetwork.subnets[ 0 ] }}"
+
+- name: gather facts about the private network (LAN) subnets
+  connection:                     local
+  os_subnets_facts:
+    cloud:                        "{{ os_cloud_name }}"
+    filters:
+      id:                         "{{ os_cloud_privatesubnet_id }}"
+
+- name: store private subnet (LAN) cidr as fact
+  set_fact:
+    os_cloud_privatesubnet_cidr:  "{{ openstack_subnets[ 0 ].cidr }}"
+
+- name: store private subnet (LAN) gateway IP as fact
+  set_fact:
+    os_cloud_privatesubnet_gateway: "{{ openstack_subnets[ 0 ].gateway_ip }}"
+
+- name: adding existing OpenStack instance to its groups
+  no_log:                         true
+  add_host:
+    name:                         "{{ item.id }}"
+    groups:                       "{{ item.metadata.groups }}"
+    instance_name:                "{{ item.name }}"
+    os_uuid:                      "{{ item.id }}"
+    os_key_name:                  "{{ item.metadata.key_name }}"
+    os_instance_tags:             "{{ item.metadata.tags }}"
+    ansible_ssh_host:             "{{ ( item.networks[ os_cloud_publicnetwork_name ] | default( [] ) )[ 0 ] | default( item.networks[ os_cloud_privatenetwork_name ][ 0 ] ) }}"
+    openstack:
+      interface_ip:               "{{ ( item.networks[ os_cloud_publicnetwork_name ] | default( [] ) )[ 0 ] | default( item.networks[ os_cloud_privatenetwork_name ][ 0 ] ) }}"
+      accessIPv4:                 "{{ ( item.networks[ os_cloud_publicnetwork_name ] | default( [] ) )[ 0 ] | default( item.networks[ os_cloud_privatenetwork_name ][ 0 ] ) }}"
+    public_v4:                    "{{ ( item.networks[ os_cloud_publicnetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
+    private_v4:                   "{{ ( item.networks[ os_cloud_privatenetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
+    publicIPv4:                   "{{ ( item.networks[ os_cloud_publicnetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
+    privateIPv4:                  "{{ ( item.networks[ os_cloud_privatenetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
+    os_cloud_publicnetwork_name:  "{{ os_cloud_publicnetwork_name }}"
+    os_cloud_publicnetwork_id:    "{{ os_cloud_publicnetwork_id }}"
+    os_cloud_publicsubnet_id:     "{{ os_cloud_publicsubnet_id }}"
+    os_cloud_publicsubnet_cidr:   "{{ os_cloud_publicsubnet_cidr }}"
+    os_cloud_privatenetwork_name: "{{ os_cloud_privatenetwork_name }}"
+    os_cloud_privatenetwork_id:   "{{ os_cloud_privatenetwork_id }}"
+    os_cloud_privatesubnet_id:    "{{ os_cloud_privatesubnet_id }}"
+    os_cloud_privatesubnet_cidr:  "{{ os_cloud_privatesubnet_cidr }}"
+    os_instancename_prefix:       ''
+  with_items:                     "{{ gathered_os_instance_list.ansible_facts.openstack_servers }}"

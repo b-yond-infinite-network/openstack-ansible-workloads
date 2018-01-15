@@ -1,0 +1,35 @@
+---
+# Playbook to ensure RDO is installed and configured correctly
+
+# - name: stop and disable firewalld
+#   systemd:
+#     state:            stopped
+#     name:             firewalld
+#     enabled:          no
+
+- name: stop and disable NetworkManager
+  systemd:
+    state:            stopped
+    name:             NetworkManager
+    enabled:          no
+
+- name: stop and disable network
+  systemd:
+    state:            started
+    name:             network
+    enabled:          yes
+
+- name: ensure repository is activated
+  yum:
+    name:            centos-release-openstack-ocata
+    state:           present
+    update_cache:    yes
+
+- name: ensure packstack is installed
+  yum:
+    name:            openstack-packstack
+    state:           present
+#
+# - name: activate packstack single node
+#   command:            packstack --allinone
+#   register:           packstack_status

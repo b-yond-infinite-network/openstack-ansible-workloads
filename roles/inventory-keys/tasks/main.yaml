@@ -1,0 +1,21 @@
+---
+# Playbook to manage OpenStack keys
+
+- name: checking if SSH key exists
+  stat:
+    path:             "{{ ansible_ssh_private_key_file }}"
+  register:           sshkey_exist
+
+- name: generate SSH keys
+  when:               ( action is undefined or ( not "delete" in action ) ) and sshkey_exist.stat.exists == False
+  shell:              ssh-keygen -b 2048 -t rsa -f "{{ ansible_ssh_private_key_file }}" -q -N ""
+  args:
+    creates:          "{{ ansible_ssh_private_key_file }}"
+
+- name: make sure our SSH key is recorded in OpenStack
+  when:               action is undefined or ( not "delete" in action )
+  os_keypair:
+    cloud:            "{{ os_cloud_name }}"
+    state:            present
+    name:             "{{ os_key_name }}"
+    public_key_file:  "{{ ansible_ssh_private_key_file }}.pub"

@@ -1,0 +1,191 @@
+---
+# Playbook to implement a Keepalived floating IP
+
+- include_vars:
+    file:                         roles/inventory/defaults/main.yaml
+
+- name: we've choosen the instance
+  run_once:                       true
+  debug:                          msg="{{ virtualrouter_id }} to be Virtual Router"
+
+- name: build ip pairs array
+  set_fact:
+    ippairs: |
+              {% set comma = joiner(",") %}
+              {% for address in ( groups[ 'public_nodes' ] | map( 'extract', hostvars, 'publicIPv4' ) | list ) -%}
+                {{ comma() }}{{ { 'ip_address': address } }}
+              {%- endfor %}
+
+- name: ensure neutron port to reserve Keepalived IP address exists
+  run_once:                       true
+  connection:                     local
+  os_port:
+    cloud:                        "{{ os_cloud_name }}"
+    name:                         "{{ master_role }}-keepalived-port"
+    network:                      "{{ os_cloud_publicnetwork_name }}"
+    allowed_address_pairs:        "{{ ippairs }}"
+    security_groups:              "{{ master_role }}-public-secgroup"
+  with_items:                     "{{ groups[ 'public_nodes' ] }}"
+
+- name: gather the Keepalived neutron port facts
+  run_once:                       true
+  connection:                     local
+  os_port_facts:
+    cloud:                        "{{ os_cloud_name }}"
+    filters:
+      name:                       "{{ master_role }}-keepalived-port"
+
+- name: store Keepalived port IP address for virtual routeur
+  run_once:                       true
+  set_fact:
+    virtualrouter_ipaddress:      "{{ openstack_ports[ 0 ].fixed_ips[ 0 ].ip_address }}"
+
+
+- name: this is the public exposed IP that will be load-balanced, you can use it in your DNS
+  run_once:                       true
+  debug:
+    msg:                          "KEEPALIVED IP ADDRESS: {{ virtualrouter_ipaddress }}"
+
+- name: gather port facts for WAN of public nodes
+  connection:                     local
+  os_port_facts:
+    cloud:                        "{{ os_cloud_name }}"
+    filters:
+      status:                     ACTIVE
+      device_id:                  "{{ inventory_hostname }}"
+      network_id:                 "{{ os_cloud_publicnetwork_id }}"
+
+- name: ensure neutron port for WAN of public nodes allow virtual routeur IP address
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  connection:                     local
+  os_port:
+    cloud:                        "{{ os_cloud_name }}"
+    name:                         "{{ openstack_ports[ 0 ].id }}"
+    #device_id:                    "{{ inventory_hostname }}"
+    allowed_address_pairs:        "{{ [{ 'ip_address': virtualrouter_ipaddress }] }}"
+
+- name: update apt repo
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  apt:                            update_cache=yes
+  register:                       apt_result
+  until:                          apt_result|success
+  retries:                        3
+  delay:                          30
+  ignore_errors:                  yes
+  become:                         yes
+
+- name: retry if needed using command apt-get update
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ] and apt_result|failed
+  command:                        apt-get update
+  become:                         yes
+
+- name: install Keepalived and dependencies
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  apt:                            pkg={{ item }} state=installed
+  register:                       apt_result
+  until:                          apt_result|success
+  retries:                        3
+  delay:                          30
+  ignore_errors:                  yes
+  become:                         yes
+  with_items:
+    - build-essential
+    - libssl-dev
+
+- name: ensuring Keepalived source code is present
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  unarchive:
+    src:                          http://www.keepalived.org/software/keepalived-{{ keepalived_version }}.tar.gz
+    dest:                         /usr/local/src
+    remote_src:                   True
+
+- name: configure the compilation of Keepalived
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  command:                        ./configure --prefix=/usr/local
+  args:
+    chdir:                        "/usr/local/src/keepalived-{{ keepalived_version }}"
+
+- name: build Keepalived
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  command:                        make
+  args:
+    chdir:                        "/usr/local/src/keepalived-{{ keepalived_version }}"
+
+- name: install Keepalived
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  command:                        make install
+  args:
+    chdir:                        "/usr/local/src/keepalived-{{ keepalived_version }}"
+
+- name: ensure ip_vs kernel module is loaded
+  modprobe:
+    name:                         ip_vs
+    state:                        present
+
+- name: ensure network connection tracker kernel module is loaded
+  modprobe:
+    name:                         nf_conntrack
+    state:                        present
+
+- name: ensure IP forwarding is activated
+  sysctl:
+    name:                         net.ipv4.ip_forward
+    value:                        1
+    sysctl_set:                   yes
+    state:                        present
+
+- name: ensure IP can be binded non-locally
+  sysctl:
+    name:                         net.ipv4.ip_nonlocal_bind
+    value:                        1
+    sysctl_set:                   yes
+    state:                        present
+
+- name: ensure max number of tracked connexion is very high
+  sysctl:
+    name:                         net.nf_conntrack_max
+    value:                        1000000
+    sysctl_set:                   yes
+    state:                        present
+    reload:                       yes
+
+- name: enfore Keepalived daemon configuration file
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  become:                         yes
+  template:
+    src:                          keepalived.systemd.j2
+    dest:                         /etc/systemd/system/keepalived.service
+    owner:                        root
+    group:                        root
+    mode:                         0751
+
+- name: disabling ufw
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  ufw:
+    state:                        disabled
+
+- name: ensure Keepalived directory exists
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  become:                         yes
+  file:
+    path:                         /etc/keepalived
+    state:                        directory
+    mode:                         0755
+
+- name: enforce Keepalived configuration file
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  become:                         yes
+  template:
+    src:                          keepalived.conf.j2
+    dest:                         /etc/keepalived/keepalived.conf
+    owner:                        root
+    group:                        root
+    mode:                         0644
+
+- name: ensure Keepalived is auto-starting deamon
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
+  service:
+    state:                        started
+    use: service
+    enabled:                      yes
+    name:                         keepalived

@@ -1,0 +1,4 @@
+---
+dependencies:
+   - docker
+   - { role: keepalived, when: ( ha is undefined ) or ( ha == true ) }

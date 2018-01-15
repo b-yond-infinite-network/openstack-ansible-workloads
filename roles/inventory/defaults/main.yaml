@@ -1,0 +1,2 @@
+#os_cloud_privatenetwork_name:   "{{ network_lan         | default( ( openstack_config is defined and openstack_config.network_lan is defined )          | ternary( openstack_config.network_lan,    '' ) ) }}"
+#os_cloud_publicnetwork_name:    "{{ network_wan         | default( ( openstack_config is defined and openstack_config.network_wan is defined )          | ternary( openstack_config.network_wan,    '' ) ) }}"

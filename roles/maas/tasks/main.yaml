@@ -1,0 +1,121 @@
+---
+# Playbook to ensure MAAS is installed and configured correctly
+
+- name: share MAAS controller hostname play-wide
+  set_fact:
+    os_maas_controller:           "{{ groups[ 'public_nodes' ][ 0 ] }}"
+
+- name: share public IP as MAAS controller (hosts are public)
+  set_fact:
+    os_maas_controller_ip: "{{ hostvars[ os_maas_controller ].publicIPv4 }}"
+  when:                           private_node_number <= 0
+
+- name: share private IP as MAAS controller (hosts are private)
+  set_fact:
+    os_maas_controller_ip:        "{{ hostvars[ os_maas_controller ].privateIPv4 }}"
+  when:                           private_node_number > 0
+
+- name: update apt repo
+  apt:                            update_cache=yes
+  register:                       apt_result
+  until:                          apt_result|success
+  retries:                        3
+  delay:                          30
+  ignore_errors:                  yes
+  become:                         yes
+
+- name: retry if needed using command apt-get update
+  command:                        apt-get update
+  when:                           apt_result|failed
+  become:                         yes
+
+- name: install MAAS Rack Controller
+  apt:                            pkg={{ item }} state=installed
+  register:                       apt_result
+  until:                          apt_result|success
+  retries:                        3
+  delay:                          30
+  ignore_errors:                  yes
+  become:                         yes
+  with_items:
+    - maas-rack-controller
+    - python3-novaclient
+  when:                           ( maas_controller_count is defined and maas_controller_count > 0 and inventory_hostname != os_maas_controller ) or ( maas_controller_count is undefined and inventory_hostname == os_maas_controller )
+
+- name: add MAAS Rack Controller to os_maas_rack_controller group
+  add_host:
+    hostname:                     "{{ inventory_hostname }}"
+    groups:                       os_maas_rack_controller
+  when:                           ( maas_controller_count is defined and maas_controller_count > 0 and inventory_hostname != os_maas_controller ) or ( maas_controller_count is undefined and inventory_hostname == os_maas_controller )
+
+- name: install MAAS Region Controller
+  apt:                            pkg={{ item }} state=installed
+  register:                       apt_result
+  until:                          apt_result|success
+  retries:                        3
+  delay:                          30
+  ignore_errors:                  yes
+  become:                         yes
+  with_items:
+    - maas-region-controller
+    - python3-novaclient
+  when:                           inventory_hostname == os_maas_controller
+
+- name: add MAAS Region Controller to os_maas_region_controller group
+  add_host:
+    hostname:                     "{{ inventory_hostname }}"
+    groups:                       os_maas_region_controller
+  when:                           inventory_hostname == os_maas_controller
+
+- name: generating MAAS admin password
+  shell:                          openssl rand -base64 12
+  register:                       generated_password
+  when:                           inventory_hostname == os_maas_controller
+
+- name: saving password as fact
+  set_fact:
+    os_maas_admin_password:       "{{ generated_password.stdout }}"
+  when:                           inventory_hostname == os_maas_controller
+
+- name: admin password display
+  debug:
+    msg:                          "This is the MAAS administrator password, note it down : {{ os_maas_admin_password }}"
+  when:                           inventory_hostname == os_maas_controller
+
+- name: creating MAAS administrator
+  command:                        maas createadmin --username=maas-admin --password="{{ os_maas_admin_password }}"
+  register:                       maas_create_admin
+  until:                          maas_create_admin|success
+  retries:                        3
+  delay:                          10
+  ignore_errors:                  yes
+  become:                         yes
+  when:                           inventory_hostname == os_maas_controller
+
+- name: pull MAAS secret from controller
+  command:                        cat /var/lib/maas/secret
+  register:                       maas_secret
+  until:                          maas_secret|success
+  retries:                        3
+  delay:                          30
+  ignore_errors:                  yes
+  become:                         yes
+  when:                           inventory_hostname == os_maas_controller
+
+- name: sharing MAAS secret play-wide
+  set_fact:
+    os_maas_secret:               "{{ hostvars[ os_maas_controller ].maas_secret.stdout }}"
+
+- name: secret display
+  debug:
+    msg:                          "This is the MAAS secret token, note it down : {{ os_maas_secret }}"
+
+- name: register MAAS Rack Controller to MAAS Region Controller
+  command:                        maas-rack register --url http://"{{ os_maas_controller_ip }}":5240/MAAS --secret "{{ os_maas_secret }}"
+  register:                       maas_rack
+  until:                          maas_rack|success
+  retries:                        3
+  delay:                          10
+  ignore_errors:                  yes
+  become:                         yes
+  when:                           ( ( maas_controller_count is defined and maas_controller_count > 0 and inventory_hostname != os_maas_controller ) or ( maas_controller_count is undefined and inventory_hostname == os_maas_controller ) ) and os_maas_secret is defined

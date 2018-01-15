@@ -1,0 +1,6 @@
+#node counting and balancing
+default_public_count:           1
+default_private_count:          0
+node_number:                    "{{ node_count                          | default( ( ( public_node_count | default( default_public_count ) ) | int ) + ( ( private_node_count | default( default_private_count ) ) | int ) ) }}"
+public_node_number:             "{{ public_node_count                   | default( ( node_number | int ) - ( ( private_node_count | default( default_private_count ) ) | int ) ) }}"
+private_node_number:            "{{ private_node_count                  | default( ( node_number | int ) - ( ( ( public_node_number > 0 ) | ternary( public_node_number, default_public_count ) ) | int ) ) }}"

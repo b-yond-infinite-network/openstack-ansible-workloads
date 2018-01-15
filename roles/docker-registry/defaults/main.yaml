@@ -1,0 +1,19 @@
+#node counting and balancing
+default_public_count:           1
+default_private_count:          0
+node_number:                    "{{ node_count                          | default( ( ( public_node_count | default( default_public_count ) ) | int ) + ( ( private_node_count | default( default_private_count ) ) | int ) ) }}"
+public_node_number:             "{{ public_node_count                   | default( ( node_number | int ) - ( ( private_node_count | default( default_private_count ) ) | int ) ) }}"
+private_node_number:            "{{ private_node_count                  | default( ( node_number | int ) - ( ( ( public_node_number > 0 ) | ternary( public_node_number, default_public_count ) ) | int ) ) }}"
+
+#if there's private node, we default on selecting the last private node as the registry
+os_docker_registry_exposition:  "{{ ( ( ( groups[ master_role + '-private_nodes' ] | default( [] ) ) | length ) > 0 ) | ternary( master_role + '-private_nodes', master_role + '-public_nodes' ) }}"
+os_docker_registry_idx:         "{{ ( ( groups[ os_docker_registry_exposition ] | default( [ ] ) ) | length ) - 1 }}"
+os_docker_registry:             "{{ ( groups[ os_docker_registry_exposition ] | default( [ ] ) ) [ os_docker_registry_idx | int ] }}"
+
+#groups[ master_role + '-private_nodes' ][ os_docker_registry_idx | int ]
+certs_directory:                "/opt/certs/"
+registry_private_port:          5000
+registry_public_port:           443
+
+#parameter passing for meta roles
+os_docker_registry_dnsnames:    "{{ docker_registry_dnsnames | default( [ 'docker.local', 'docker.prod' ] ) }}"

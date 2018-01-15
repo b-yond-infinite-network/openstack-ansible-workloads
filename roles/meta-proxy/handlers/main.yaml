@@ -1,0 +1,16 @@
+---
+# handlers file for squid
+
+- name: restart Squid
+  service:
+    name:         squid
+    state:        restarted
+  tags:
+    - squid
+
+- name: restart Bind9
+  service:
+    name:         bind9
+    state:        restarted
+  tags:
+    - bind9

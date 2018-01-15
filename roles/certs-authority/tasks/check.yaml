@@ -1,0 +1,40 @@
+---
+# Playbook to ensure Certificate Authority is usable
+
+- name: CA check -- ensure certifate directory exists
+  file:
+    path:             "{{ certs_directory }}"
+    state:            directory
+    mode:             0755
+
+########## private key management
+- name: CA check -- upload CA private key if it's passed as parameter ca_privatekey_filepath=
+  when:               ca_privatekey_filepath is defined
+  copy:
+    directory_mode:   0755
+    src:              "{{ ca_privatekey_filepath }}"
+    dest:             "{{ certs_directory }}{{ master_role }}-CA.privatekey.key"
+
+- name: CA check -- checking if the Certificate Authority private key exists on the server
+  stat:
+    path:             "{{ certs_directory }}{{ master_role }}-CA.privatekey.key"
+  register:           ca_privatekey_exist
+
+- fail:               msg="The CA private key is not present on this node or not passed as parameter ca_privatekey_filepath"
+  when:               ca_privatekey_exist.stat.exists == False
+
+########## public key management
+- name: CA check -- upload CA public key if it's passed as parameter ca_publickey_filepath=
+  when:               ca_publickey_filepath is defined
+  copy:
+    directory_mode:   0755
+    src:              "{{ ca_publickey_filepath }}"
+    dest:             "{{ certs_directory }}{{ master_role }}-CA.publickey.crt"
+
+- name: CA check -- checking if the Certificate Authority public key exists on the server
+  stat:
+    path:             "{{ certs_directory }}{{ master_role }}-CA.publickey.crt"
+  register:           ca_publickey_exist
+
+- fail:               msg="The CA public key is not present on this node or not passed as parameter ca_privatekey_filepath"
+  when:               ca_publickey_exist.stat.exists == False

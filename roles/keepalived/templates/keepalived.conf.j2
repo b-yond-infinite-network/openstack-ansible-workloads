@@ -1,0 +1,17 @@
+vrrp_instance VRRP_INSTANCE {
+  interface ens4
+  state BACKUP
+  priority 50
+  advert_int 1
+  virtual_router_id 148
+  virtual_ipaddress {
+    {{ virtualrouter_ipaddress }} dev ens3
+  }
+  track_interface {
+    ens3
+  }
+  authentication {
+    auth_type PASS
+    auth_pass Passw0rd
+  }
+}

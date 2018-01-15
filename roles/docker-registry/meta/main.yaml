@@ -1,0 +1,4 @@
+---
+dependencies:
+  - docker
+  - { role: certs-authority, when: inventory_hostname == os_docker_registry, server_dnsnames: "{{ os_docker_registry_dnsnames }}" }

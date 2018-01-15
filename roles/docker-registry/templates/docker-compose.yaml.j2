@@ -1,0 +1,32 @@
+nginx:
+  image: "nginx:1.9"
+  ports:
+    - 443:443
+  links:
+    - registry:registry
+  volumes:
+    - /usr/local/sbin/nginx/:/etc/nginx/conf.d
+
+registry:
+  image:                              registry:2
+  restart_policy:                     always
+  ports:
+  - "5000:5000"
+  env:
+    REGISTRY_HTTP_TLS_CERTIFICATE:    "{{ certs_directory }}{{ master_role }}-{{ inventory_hostname }}.crt"
+    REGISTRY_HTTP_TLS_KEY:            "{{ certs_directory }}{{ master_role }}-{{ inventory_hostname }}.key"
+    REGISTRY_STORAGE:                 swift
+    REGISTRY_STORAGE_SWIFT_USERNAME:  "{{ os_auth_params.username }}"
+    REGISTRY_STORAGE_SWIFT_PASSWORD:  "{{ os_auth_params.password }}"
+    REGISTRY_STORAGE_SWIFT_AUTHURL:   "{{ os_auth_params.auth_url }}"
+    REGISTRY_STORAGE_SWIFT_TENANT:    "{{ os_auth_params.project_name }}"
+    REGISTRY_STORAGE_SWIFT_DOMAIN:    "{{ os_auth_params.project_domain_name }}"
+    REGISTRY_STORAGE_SWIFT_REGION:    "{{ os_auth_region_name }}"
+    REGISTRY_STORAGE_SWIFT_CONTAINER: "{{ master_role }}"
+    REGISTRY_STORAGE_SWIFT_INSECURESKIPVERIFY: yes
+  maintenance:
+    uploadpurging:
+      enabled:                        true
+      age:                            168h
+      interval:                       24h
+      dryrun:                         false

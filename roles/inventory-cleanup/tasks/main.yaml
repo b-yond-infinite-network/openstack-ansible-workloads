@@ -1,0 +1,79 @@
+---
+# Playbook to cleanup OpenStack instance and resource (if specififed)
+- name: confirm
+  pause: prompt="\n\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!WARNING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n\n\nThis action is destructive, it will remove ALL current '{{ master_role }}' tagged instances !\n--Press return if you're absolutely sure. Otherwise, press Ctrl+c and then 'a' to abort--"
+  when: not 'local' in action and 'delete' in action
+
+- name: delete OpenStack instances
+  when: not 'local' in action and 'delete' in action and groups[ master_role ] is defined
+  os_server:
+    cloud:                  "{{ os_cloud_name }}"
+    state:                  absent
+    name:                   "{{ item }}"
+  with_items:               "{{ groups[ master_role ] }}"
+
+- name: refresh inventory after delete
+  meta: refresh_inventory
+
+- name: checking if bastion config exists
+  when: not 'local' in action and 'delete' in action
+  stat:
+    path:                   "./config/data/{{ master_role }}-ssh_config"
+  register:                 bastionconfig_exist
+
+- name: delete bastion config
+  when: not 'local' in action and 'delete' in action and bastionconfig_exist.stat.exists == True
+  file:
+      path:                 "./config/data/{{ master_role }}-ssh_config"
+      state:                absent
+
+- name: delete all port created in OpenStack for keepalived
+  when: not 'local' in action and 'delete' in action
+  os_port:
+    cloud:                  "{{ os_cloud_name }}"
+    state:                  absent
+    name:                   "{{ master_role }}-keepalived-port"
+
+- name: delete existing SSH keys in OpenStack
+  when: '"delete_all" in action'
+  os_keypair:
+      cloud:                "{{ os_cloud_name }}"
+      state:                absent
+      name:                 "{{ os_key_name }}"
+
+- name: delete security group for public facing nodes in OpenStack
+  os_security_group:
+    cloud:                  "{{ os_cloud_name }}"
+    state:                  absent
+    name:                   "{{ master_role }}-public-secgroup"
+
+- name: checking if SSH key exists
+  when: not 'local' in action
+  register: sshkey_exist
+  stat:
+    path:                   "{{ ansible_ssh_private_key_file }}"
+
+- name: delete private SSH keys locally
+  when: action == "delete_all_includinguserkey" and sshkey_exist.stat.exists == True
+  file:
+    path:                   "{{ ansible_ssh_private_key_file }}"
+    state:                  absent
+
+- name: checking if public SSH key exists
+  when: not 'local' in action
+  register:                 sshpubkey_exist
+  stat:
+    path:                   "{{ ansible_ssh_private_key_file }}.pub"
+
+- name: delete public SSH keys locally
+  when: action == "delete_all_includinguserkey" and sshpubkey_exist.stat.exists == True
+  file:
+    path:                   "{{ ansible_ssh_private_key_file }}.pub"
+    state:                  absent
+
+- name: include role clean up tasks if they exists
+  include:                  "roles/{{ role }}/tasks/cleanup.yaml"
+  with_first_found:
+    - files:
+      - "roles/{{ role }}/tasks/cleanup.yaml"
+      skip: true

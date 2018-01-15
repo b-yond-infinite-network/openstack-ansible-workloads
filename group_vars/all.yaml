@@ -1,0 +1,19 @@
+action:                         "maintain"
+
+#OpenStack ssg key name defaulting
+os_cloud_name:                  "{{ os_cloud            | default( ( openstack_config is defined and openstack_config.os_cloud is defined ) | ternary( openstack_config.os_cloud,      '' ) ) }}"
+os_instancename_prefix:         "{{ instancename_prefix | default( master_role + '-' ) }}"
+os_key_name:                    "{{ key_filename        | default( master_role + '-key' ) }}"
+os_instance_tags:               "{{ server_tags         | default( master_role ) }}"
+
+#keypair defaulting
+computed_ssh_key_path:          "{{ ( '~' | expanduser ) + '/.ssh/' }}"
+ansible_user:                   root
+ansible_ssh_user:               root
+ansible_ssh_private_key_file:   "{{ computed_ssh_key_path + os_key_name }}"
+
+
+#squid defaults (have to be global to be shared accross all meta-roles)
+proxy_http_port:                3128
+global_dns_server_1:            69.9.191.4
+global_dns_server_2:            69.9.160.191

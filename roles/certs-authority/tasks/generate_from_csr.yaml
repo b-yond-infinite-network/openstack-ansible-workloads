@@ -1,0 +1,27 @@
+---
+# Playbook to generate a Certificate from a Certificate Request
+- name: CA generate key -- check for Certificate Authority keys presence
+  include_role:
+    name:             certs-authority
+    tasks_from:       check
+
+- fail:               msg="The request_type parameter must be defined and equal to 'client' or 'server' depending on the role you want to assign the certificate to"
+  when:               request_type is undefined or (request_type != 'server' and request_type != 'client')
+
+- fail:               msg="The host_to_sign parameter must be defined and an array of all the {{ request_type }} node ID you want to sign"
+  when:               host_to_sign is undefined
+
+- name: CA generate key -- check if Certificate already exists
+  stat:
+    path:             "{{ certs_directory }}{{ master_role }}-{{ host_to_sign }}-{{ request_type }}.publickey.crt"
+  register:           certificate_exist
+
+- name: CA generate key -- if the certificate doesn't exist already, generate it
+  when:               certificate_exist.stat.exists == False
+  shell:              "openssl x509 -req -in {{ certs_directory }}{{ master_role }}-{{ host_to_sign }}-{{ request_type }}.csr \
+                        -CA {{ certs_directory }}{{ master_role }}-CA.publickey.crt \
+                        -CAkey {{ certs_directory }}{{ master_role }}-CA.privatekey.key \
+                        -CAcreateserial \
+                        -out {{ certs_directory }}{{ master_role }}-{{ host_to_sign }}-{{ request_type }}.publickey.crt -days 365 \
+                        -extensions v3_req \
+                        -extfile {{ certs_directory }}{{ master_role }}-{{ host_to_sign }}-{{ request_type }}.openssl.cnf"

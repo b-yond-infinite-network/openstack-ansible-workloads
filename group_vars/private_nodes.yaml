@@ -1,0 +1,2 @@
+#this allow the bastion to be used during the playbook run
+ansible_ssh_common_args:        "-F ./config/data/{{ master_role }}-ssh_config -o LogLevel=QUIET"

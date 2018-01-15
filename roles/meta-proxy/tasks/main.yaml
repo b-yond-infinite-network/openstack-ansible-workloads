@@ -1,0 +1,147 @@
+---
+# Playbook to ensure host is proxying request to the internet
+
+#we're choosing the last public node
+- name: set proxy host index in public_nodes group
+  set_fact:
+    proxy_public_nodes_idx: "{{ ( ( groups[ 'public_nodes' ]  | length ) - 1 ) }}"
+
+- name: set proxy host
+  set_fact:
+    proxy_host:             "{{ groups[ 'public_nodes' ][ proxy_public_nodes_idx | int ] }}"
+
+- name: set proxy host public IP
+  set_fact:
+    proxy_host_publicip:    "{{ hostvars[ proxy_host ].publicIPv4 }}"
+
+- name: set proxy host private IP
+  set_fact:
+    proxy_host_privateip:   "{{ hostvars[ proxy_host ].privateIPv4 }}"
+
+- name: Update apt repo
+  when:                     inventory_hostname == proxy_host
+  become:                   yes
+  apt:                      update_cache=yes
+  register:                 apt_result
+  until:                    apt_result|success
+  retries:                  3
+  delay:                    30
+  ignore_errors:            yes
+
+- name: retry if needed using command apt-get update
+  when:                     inventory_hostname == proxy_host and apt_result|failed
+  become:                   yes
+  command:                  apt-get update
+
+- name: install Squid
+  when:                     inventory_hostname == proxy_host
+  become:                   yes
+  apt:                      pkg=squid state=installed
+  register:                 apt_result
+  until:                    apt_result|success
+  retries:                  3
+  delay:                    30
+  ignore_errors:            yes
+
+- name: check Squid configuration file
+  when:                     inventory_hostname == proxy_host
+  become:                   yes
+  template:
+    src:                    squid.conf.j2
+    dest:                   /etc/squid/squid.conf
+    owner:                  root
+    group:                  root
+    mode:                   0644
+  notify:
+    - restart Squid
+
+- name: ensure Squid service is started and enabled on boot
+  when:                     inventory_hostname == proxy_host
+  become:                   yes
+  service:
+    name:                   squid
+    state:                  started
+    enabled:                yes
+
+- name: enforce private node to use proxy for apt operations
+  when:                     inventory_hostname in groups[ 'private_nodes' ]
+  become:                   yes
+  blockinfile:
+    create:                 yes
+    state:                  present
+    dest:                   /etc/apt/apt.conf
+    insertafter:            EOF
+    block:  |
+                            Acquire::http::Proxy "http://{{ proxy_host_privateip }}:{{ proxy_http_port }}";
+                            Acquire::https::Proxy "https://{{ proxy_host_privateip }}:{{ proxy_http_port }}";
+
+- name: enforce private node to use proxy for http/https operations
+  when:                     inventory_hostname in groups[ 'private_nodes' ]
+  become:                   yes
+  blockinfile:
+    create:                 yes
+    state:                  present
+    dest:                   /etc/environment
+    insertafter:            EOF
+    block:  |
+                            http_proxy="http://{{ proxy_host_privateip }}:{{ proxy_http_port }}"
+                            https_proxy="https://{{ proxy_host_privateip }}:{{ proxy_http_port }}"
+                            no_proxy="localhost,127.0.0.1"
+                            HTTP_PROXY="http://{{ proxy_host_privateip }}:{{ proxy_http_port }}"
+                            HTTPS_PROXY="https://{{ proxy_host_privateip }}:{{ proxy_http_port }}"
+                            NO_PROXY="localhost,127.0.0.1"
+
+- name: install Bind9
+  when:                     inventory_hostname == proxy_host
+  become:                   yes
+  apt:                      pkg={{ item }} state=installed
+  register:                 apt_result
+  until:                    apt_result|success
+  retries:                  3
+  delay:                    30
+  ignore_errors:            yes
+  with_items:
+  - bind9
+  - bind9utils
+  - bind9-doc
+
+- name: check Bind9 configuration file
+  when:                     inventory_hostname == proxy_host
+  become:                   yes
+  template:
+    src:                    named.conf.options.j2
+    dest:                   /etc/bind/named.conf.options
+    owner:                  root
+    group:                  root
+    mode:                   0644
+  notify:
+  - restart Bind9
+
+- name: ensure Bind9 service is started and enabled on boot
+  when:                     inventory_hostname == proxy_host
+  become:                   yes
+  service:
+    name:                   bind9
+    state:                  started
+    enabled:                yes
+
+- name: enforce private node to not use default DNS resolver
+  when:                     inventory_hostname in groups[ 'private_nodes' ]
+  become:                   yes
+  replace:
+    dest:                   /etc/resolv.conf
+    regexp:                 '^nameserver '
+    replace:                '#nameserver '
+
+- name: enforce private node to use proxy for DNS operations
+  when:                     inventory_hostname in groups[ 'private_nodes' ]
+  become:                   yes
+  blockinfile:
+    create:                 yes
+    state:                  present
+    dest:                   /etc/resolv.conf
+    insertafter:            EOF
+    block:  |
+                            nameserver {{ proxy_host_privateip }}
+                            nameserver 8.8.8.8
+                            nameserver 8.8.4.4

@@ -1,0 +1,2 @@
+os_cloud_image_name:            "{{ image_name          | default( ( openstack_config is defined and openstack_config.image_name is defined )           | ternary( openstack_config.image_name,     'Ubuntu 16.04 LTS (Xenial Xerus)' ) ) }}"
+os_cloud_flavor_name:           "{{ flavor_name         | default( ( openstack_config is defined and openstack_config.flavor_name is defined )          | ternary( openstack_config.flavor_name,    'A1.1' ) ) }}"

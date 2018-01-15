@@ -1,0 +1,8 @@
+---
+# Handler to ensure docker deamon is running
+
+- name: ensure MySQL is up
+  service: name=mysql state=started
+
+- name: restart MySQL
+  service: name=mysql state=restarted

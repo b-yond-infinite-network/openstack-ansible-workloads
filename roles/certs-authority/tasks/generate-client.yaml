@@ -1,0 +1,82 @@
+---
+# Playbook to ensure docker is installed
+
+- name: ensure certificate directory exists
+  file:
+    path:             "{{ certs_directory }}"
+    state:            directory
+    mode:             0755
+    
+- name: CA generate client keys - ensure we certify the right node
+  set_fact:
+    host_to_certify:  "{{ item | default( inventory_hostname ) }}"
+
+- name: CA generate client keys - ensure the openssl configuration is present
+  blockinfile:
+    create:           yes
+    dest:             "{{ certs_directory }}{{ master_role }}-{{ host_to_certify }}-client.openssl.cnf"
+    marker:           "#{mark} {{ playbook_name }}"
+    block: |
+                      [req]
+                      req_extensions = v3_req
+                      distinguished_name = req_distinguished_name
+                      [req_distinguished_name]
+                      [ v3_req ]
+                      basicConstraints = CA:FALSE
+                      keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+                      extendedKeyUsage = clientAuth, clientAuth
+
+## private key management
+- name: CA generate client keys - upload client private key if it's passed as parameter client_privatekey_filepath=
+  when:               client_privatekey_filepath is defined
+  copy:
+    directory_mode:   0755
+    src:              "{{ client_privatekey_filepath }}"
+    dest:             "{{ certs_directory }}{{ master_role }}-{{ host_to_certify }}-client.privatekey.key"
+
+- name: CA generate client keys - checking if client private key exists
+  stat:
+    path:             "{{ certs_directory }}{{ master_role }}-{{ host_to_certify }}-client.privatekey.key"
+  register:           client_privatekey_exist
+
+- name: CA generate client keys - generate client private key if it does not exist already
+  when:               client_privatekey_exist.stat.exists == False
+  shell:              "openssl genrsa -out {{ certs_directory }}{{ master_role }}-{{ host_to_certify }}-client.privatekey.key {{ key_size }}"
+
+## Certificate Request management
+- name: CA generate client keys - upload Certificate Request if it's passed as parameter client_csr_filepath=
+  when:               client_csr_filepath is defined
+  copy:
+    directory_mode:   0755
+    src:              "{{ client_csr_filepath }}"
+    dest:             "{{ certs_directory }}{{ master_role }}-{{ host_to_certify }}-client.csr"
+
+- name: CA generate client keys - checking if Certificate Request exists
+  stat:
+    path:             "{{ certs_directory }}{{ master_role }}-{{ host_to_certify }}-client.csr"
+  register:           client_csr_exist
+
+- name: CA generate client keys - generate Certificate Request if does not exist already
+  when:               client_csr_exist.stat.exists == False
+  shell:              "openssl req -new -key {{ certs_directory }}{{ master_role }}-{{ host_to_certify }}-client.privatekey.key \
+                        -out {{ certs_directory }}{{ master_role }}-{{ host_to_certify }}-client.csr \
+                        -config {{ certs_directory }}{{ master_role }}-{{ host_to_certify }}-client.openssl.cnf \
+                        -subj '/CN={{ master_role }}-{{ host_to_certify | md5 }}-client'"
+
+- name: CA generate client keys - generate the Client certificate
+  include_role:
+    name:             certs-authority
+    tasks_from:       generate_from_csr
+  vars:
+    request_type:     "client"
+    host_to_sign:     "{{ host_to_certify }}"
+
+- name: CA generate client keys - adding this node as a signed server by the CA
+  #no_log:                         true
+  add_host:
+    name:             "{{ host_to_certify }}"
+    groups:           certs-server
+
+- name: CA generate client keys - the current node is a signed client
+  debug:
+    msg:              "node ID : {{ host_to_certify }}"
