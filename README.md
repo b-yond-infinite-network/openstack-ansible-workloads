@@ -102,6 +102,14 @@ through the local customer-specific network
   ```bash
   ./openstack-ansible -e os_cloud=<MY_CLOUDS_YAML_PROFILE> -e role=<THE_WORKLOAD_NAME> -e node_count=4 -e key_filename=/tmp/blabla
   ```
+  * In the case of our example OVH configuration, that would be:
+    ```bash
+    ./openstack-ansible -e os_cloud=ovh -e role=<THE_WORKLOAD_NAME> -e node_count=4 -e key_filename=/tmp/blabla
+    ```
+  * And if we want to run the docker-swarm role:
+      ```bash
+      ./openstack-ansible -e os_cloud=ovh -e role=docker-swarm -e node_count=4 -e key_filename=/tmp/blabla
+      ```
 
 # Contributing
 Feel free to raise issues and send some pull request, we'll be happy to look at them!
