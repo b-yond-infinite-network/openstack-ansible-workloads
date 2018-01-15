@@ -25,7 +25,7 @@ through the local customer-specific network
 - a proxy configuration, for the private nodes to be able to do updates and install new packages
 
 ## How to use
-> **Note:** These are currently configured to be used with an Internap Agile Cloud account.
+> **Note:** These are currently configured to be used with an OVH Openstack account.
 
 1. First, install Ansible:
    * On Ubuntu
@@ -42,7 +42,7 @@ through the local customer-specific network
    ```
 2. Clone this repo :
   ```bash
-   git clone https://github.com/internap/ansible-ansible-heat
+   git clone https://github.com/b-yond-infinite-network/openstack-ansible-workloads
   ```
 3. Make sure your clouds.yaml file is configured properly:
     ```
@@ -51,25 +51,24 @@ through the local customer-specific network
     it should look something like :
       ```text
         clouds:
-          inap-AMSDemo1:
-            profile: internap
+          ovh:
+            profile: ovh
             auth:
-              auth_url:       https://identity.api.cloud.iweb.com/v3
-              project_name:   inap-12345
-              domain_name:    default
-              username:       api-RANDOM_NUMBER_GIVENTOYOU
+              project_name:   1234567890123456
+              username:       YOUR_OPENSTACK_USERNAME
               password:       YOUR_PASSWORD
-            region_name:      ams01
+            regions:  
+            - BHS3
+            - DE1
+            - GRA3
+            - SBG3
+            - UK1
+            - WAW1
       ```
 
     * To find your project name, user name and password
-      * Go to your Internap account ([login.internap.com](https://login.internap.com)),
-      * Click the 'My Infrastructure > Horizon and API Access' tab in the menu on the top
-      * Your project name is displayed in the "Option 2 : API" description under the field 'Tenant Name'
-      * For your username and password
-        * If you never got any API Username and Password, you can click on the 'Get New API Credentials' button
-        * BEWARE : If you did but don't remember them, clicking that button will regenerate new credentials and expire the old one, blocking any other access with them, including any application that would use those old credentials
-        * When you click the button, simply copy and paste both information into your clouds.yaml file, do not forget to store those credentials somewhere where you can retrieve them later
+      * Go to your OpenStack account (in general an URL like http://horizon.your-cloud-provider),
+      * Click 'Identity > Project'
 
   3. Adapt your Openstack config file to your account and your needs:
     ```
@@ -78,9 +77,9 @@ through the local customer-specific network
     it should look something like :
       ```text
         openstack_config:
-          image_name:         Ubuntu 16.04 LTS (Xenial Xerus)    #this is the OS image we'll be using
-          flavor_name:        A1.1                               #this is the default flavor we'll be using
-          controller_flavor:  A1.1                               #this is the flavor we'll be using for 'controller' node (see specifif role for details)
+          image_name:         Ubuntu 17.10                       #this is the OS image we'll be using
+          flavor_name:        s1-2                               #this is the default flavor we'll be using
+          controller_flavor:  s1-2                               #this is the flavor we'll be using for 'controller' node (see specifif role for details)
       ```
 
 5. You can now launch the Ansible playbook using :
@@ -95,7 +94,7 @@ through the local customer-specific network
  - delete: the script will then delete all existing instances
  - delete_all: the script will delete instance, local config files and keys in OS
  - delete_all_includinguserkey: the script will wipe keys and instances both in OS and locally
- - skip_setup: the script will execute only the docker role and it's dependencies and skip all creation and setup of instance 
+ - skip_setup: the script will execute only the docker role and it's dependencies and skip all creation and setup of instance
 * key_filename= explicit SSH key file name to use
 
 ##### Which would mean, for a 4 node docker swarm cluster using a shared ssh key stored in /tmp/blabla:
