@@ -1,7 +1,7 @@
 openstack_config:
-  image_name:         Ubuntu 16.04 LTS (Xenial Xerus)
-  flavor_name:        A1.1
-  controller_flavor:  A1.1
+  image_name:         Ubuntu 17.10
+  flavor_name:        s1-2
+  controller_flavor:  s1-2
   #image_name:         CentOS 7
   #flavor_name:        A1.8
   #controller_flavor:  A1.8

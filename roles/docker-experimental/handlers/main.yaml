@@ -2,4 +2,4 @@
 # Handler to ensure docker deamon is running
 
 - name: ensure Docker is up
-  service: name=docker state=started
+  service:        name=docker state=started

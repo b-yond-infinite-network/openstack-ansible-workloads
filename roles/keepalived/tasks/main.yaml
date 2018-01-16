@@ -16,6 +16,9 @@
                 {{ comma() }}{{ { 'ip_address': address } }}
               {%- endfor %}
 
+- debug:
+    msg: "We are authorizing IPPairs : {{ [ ippairs ] }}"
+
 - name: ensure neutron port to reserve Keepalived IP address exists
   run_once:                       true
   connection:                     local
@@ -23,7 +26,7 @@
     cloud:                        "{{ os_cloud_name }}"
     name:                         "{{ master_role }}-keepalived-port"
     network:                      "{{ os_cloud_publicnetwork_name }}"
-    allowed_address_pairs:        "{{ ippairs }}"
+    allowed_address_pairs:        "{{ [ ippairs ] }}"
     security_groups:              "{{ master_role }}-public-secgroup"
   with_items:                     "{{ groups[ 'public_nodes' ] }}"
 
@@ -93,6 +96,7 @@
     - libssl-dev
 
 - name: ensuring Keepalived source code is present
+  become:                         yes
   when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   unarchive:
     src:                          http://www.keepalived.org/software/keepalived-{{ keepalived_version }}.tar.gz
@@ -100,34 +104,40 @@
     remote_src:                   True
 
 - name: configure the compilation of Keepalived
+  become:                         yes
   when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   command:                        ./configure --prefix=/usr/local
   args:
     chdir:                        "/usr/local/src/keepalived-{{ keepalived_version }}"
 
 - name: build Keepalived
+  become:                         yes
   when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   command:                        make
   args:
     chdir:                        "/usr/local/src/keepalived-{{ keepalived_version }}"
 
 - name: install Keepalived
+  become:                         yes
   when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   command:                        make install
   args:
     chdir:                        "/usr/local/src/keepalived-{{ keepalived_version }}"
 
 - name: ensure ip_vs kernel module is loaded
+  become:                         yes
   modprobe:
     name:                         ip_vs
     state:                        present
 
 - name: ensure network connection tracker kernel module is loaded
+  become:                         yes
   modprobe:
     name:                         nf_conntrack
     state:                        present
 
 - name: ensure IP forwarding is activated
+  become:                         yes
   sysctl:
     name:                         net.ipv4.ip_forward
     value:                        1
@@ -135,6 +145,7 @@
     state:                        present
 
 - name: ensure IP can be binded non-locally
+  become:                         yes
   sysctl:
     name:                         net.ipv4.ip_nonlocal_bind
     value:                        1
@@ -142,6 +153,7 @@
     state:                        present
 
 - name: ensure max number of tracked connexion is very high
+  become:                         yes
   sysctl:
     name:                         net.nf_conntrack_max
     value:                        1000000
@@ -150,8 +162,8 @@
     reload:                       yes
 
 - name: enfore Keepalived daemon configuration file
-  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   become:                         yes
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   template:
     src:                          keepalived.systemd.j2
     dest:                         /etc/systemd/system/keepalived.service
@@ -160,21 +172,22 @@
     mode:                         0751
 
 - name: disabling ufw
+  become:                         yes
   when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   ufw:
     state:                        disabled
 
 - name: ensure Keepalived directory exists
-  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   become:                         yes
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   file:
     path:                         /etc/keepalived
     state:                        directory
     mode:                         0755
 
 - name: enforce Keepalived configuration file
-  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   become:                         yes
+  when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   template:
     src:                          keepalived.conf.j2
     dest:                         /etc/keepalived/keepalived.conf
@@ -183,6 +196,7 @@
     mode:                         0644
 
 - name: ensure Keepalived is auto-starting deamon
+  become:                         yes
   when:                           groups[ 'public_nodes' ] is defined and inventory_hostname in groups[ 'public_nodes' ]
   service:
     state:                        started

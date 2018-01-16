@@ -27,7 +27,14 @@ through the local customer-specific network
 ## How to use
 > **Note:** These are currently configured to be used with an OVH Openstack account.
 
-1. First, install Ansible:
+1. First, using either pip or the package install
+  1. using pip:
+   * Install pip and the library to connect to OpenStack (shade)
+   ```bash
+   sudo pip install ansible shade python-openstackclient --ignore-installed six
+   ```
+
+  2. using default install:
    * On Ubuntu
    ```bash
    sudo apt-get install ansible
@@ -40,6 +47,7 @@ through the local customer-specific network
    ```bash
    brew install ansible
    ```
+
 2. Clone this repo :
   ```bash
    git clone https://github.com/b-yond-infinite-network/openstack-ansible-workloads
@@ -91,10 +99,10 @@ through the local customer-specific network
 * node_count= the total number of node you want to create/maintain
 * public_node_count= the number of node you want to be public facing
 * action= a non-default action to trigger, that can be :
- - delete: the script will then delete all existing instances
- - delete_all: the script will delete instance, local config files and keys in OS
- - delete_all_includinguserkey: the script will wipe keys and instances both in OS and locally
- - skip_setup: the script will execute only the docker role and it's dependencies and skip all creation and setup of instance
+  - delete: the script will then delete all existing instances
+  - delete_all: the script will delete instance, local config files and keys in OS
+  - delete_all_includinguserkey: the script will wipe keys and instances both in OS and locally
+  - skip_setup: the script will execute only the docker role and it's dependencies and skip all creation and setup of instance
 * key_filename= explicit SSH key file name to use
 
 ##### Which would mean, for a 4 node docker swarm cluster using a shared ssh key stored in /tmp/blabla:
@@ -102,13 +110,13 @@ through the local customer-specific network
   ```bash
   ./openstack-ansible -e os_cloud=<MY_CLOUDS_YAML_PROFILE> -e role=<THE_WORKLOAD_NAME> -e node_count=4 -e key_filename=/tmp/blabla
   ```
-  * In the case of our example OVH configuration, that would be:
+  * In the case of our example OVH configuration using a key automatically generated for that role, that would be:
     ```bash
-    ./openstack-ansible -e os_cloud=ovh -e role=<THE_WORKLOAD_NAME> -e node_count=4 -e key_filename=/tmp/blabla
+    ./openstack-ansible -e os_cloud=ovh -e role=<THE_WORKLOAD_NAME> -e node_count=4
     ```
   * And if we want to run the docker-swarm role:
       ```bash
-      ./openstack-ansible -e os_cloud=ovh -e role=docker-swarm -e node_count=4 -e key_filename=/tmp/blabla
+      ./openstack-ansible -e os_cloud=ovh -e role=docker-swarm -e node_count=4
       ```
 
 # Contributing

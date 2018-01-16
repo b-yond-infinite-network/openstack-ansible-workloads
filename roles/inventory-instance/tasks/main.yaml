@@ -51,6 +51,7 @@
     port_range_min:               1
     port_range_max:               65535
     remote_ip_prefix:               "{{ os_cloud_privatesubnet_cidr }}"
+  when:                           os_cloud_privatesubnet_cidr is defined
 
 - name: ensure all UDP is allowed from private network to the public interface in public-secgroup
   os_security_group_rule:
@@ -60,6 +61,7 @@
     port_range_min:               1
     port_range_max:               65535
     remote_ip_prefix:             "{{ os_cloud_privatesubnet_cidr }}"
+  when:                           os_cloud_privatesubnet_cidr is defined
 
 - name: ensure all ICMP is allowed from private network to the public interface in public-secgroup
   os_security_group_rule:
@@ -69,6 +71,7 @@
     port_range_min:               1
     port_range_max:               255
     remote_ip_prefix:             "{{ os_cloud_privatesubnet_cidr }}"
+  when:                           os_cloud_privatesubnet_cidr is defined
 
 - set_fact:
     public_cleanup_count:           "{{ ( ( ( groups[ master_role + '-public_nodes' ] | default( [] ) ) | length ) - ( public_node_number | int ) > 0 ) | ternary( ( ( groups[ master_role + '-public_nodes' ] | default( [] ) ) | length ) - ( public_node_number | int ), 0 ) }}"
@@ -83,7 +86,7 @@
   when:                           public_cleanup_count > 0
 
 - name: ensure public-facing nodes are up
-  no_log:                         true
+  # no_log:                         true
   os_server:
     cloud:                        "{{ os_cloud_name }}"
     state:                        present
@@ -92,8 +95,8 @@
     key_name:                     "{{ os_key_name }}"
     flavor:                       "{{ os_cloud_flavor_name }}"
     nics:
-      - net-name:                 "{{ os_cloud_publicnetwork_name }}"
-      - net-name:                 "{{ os_cloud_privatenetwork_name }}"
+      - net-name:                 "{{ os_cloud_publicnetwork_name | default( '' ) }}"
+      - net-name:                 "{{ os_cloud_privatenetwork_name | default( '' ) }}"
     meta:
       tags:                       "{{ os_instance_tags }}"
       groups:                     "ansible_nodes,{{ master_role }},meta-group_{{ os_instance_tags }},{{ master_role }}-public_nodes,public_nodes"
@@ -105,6 +108,7 @@
 
 - name: wait until SSH is available for public nodes
   no_log:                         true
+  when:                           os_cloud_publicnetwork_name is defined and item[ 'openstack' ] is defined and item[ 'openstack' ][ 'networks' ]
   local_action:
     module:                       wait_for
     host:                         "{{ item[ 'openstack' ][ 'networks' ][ os_cloud_publicnetwork_name ][ 0 ] }}"
@@ -116,6 +120,7 @@
 
 - name: finding public-facing port of public nodes
   no_log:                         true
+  when:                           os_cloud_publicnetwork_id is defined
   os_port_facts:
     cloud:                        "{{ os_cloud_name }}"
     filters:
@@ -135,12 +140,13 @@
   with_items:                     "{{ public_ports.results }}"
 
 - name:                           forcing local DNS attribution on private subnet
+  when:                           os_cloud_privatenetwork_name is defined
   os_subnet:
     cloud:                        "{{ os_cloud_name }}"
     state:                        present
     network_name:                 "{{ os_cloud_privatenetwork_name }}"
-    name:                         "{{ os_cloud_privatesubnet_id }}"
-    cidr:                         "{{ os_cloud_privatesubnet_cidr }}"
+    name:                         "{{ os_cloud_privatesubnet_id | default( '' )  }}"
+    cidr:                         "{{ os_cloud_privatesubnet_cidr | default( '' )  }}"
     dns_nameservers:
        - "{{ global_dns_server_1 }}"
        - "{{ global_dns_server_2 }}"
@@ -187,21 +193,19 @@
     os_uuid:                      "{{ hostvars[ item ].openstack.id }}"
     os_key_name:                  "{{ os_key_name }}"
     os_instance_tags:             "{{ os_instance_tags }}"
-    ansible_ssh_host:             "{{ ( hostvars[ item ].openstack.networks[ os_cloud_publicnetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
+    ansible_ssh_host:             "{{ hostvars[ item ].openstack.public_v4 | default( '' ) }}"
     openstack:
-      accessIPv4:                 "{{ ( hostvars[ item ].openstack.networks[ os_cloud_publicnetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
-    public_v4:                    "{{ ( hostvars[ item ].openstack.networks[ os_cloud_publicnetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
-    private_v4:                   "{{ ( hostvars[ item ].openstack.networks[ os_cloud_privatenetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
-    publicIPv4:                   "{{ ( hostvars[ item ].openstack.networks[ os_cloud_publicnetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
-    privateIPv4:                  "{{ ( hostvars[ item ].openstack.networks[ os_cloud_privatenetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
-    os_cloud_publicnetwork_name:  "{{ os_cloud_publicnetwork_name }}"
-    os_cloud_publicnetwork_id:    "{{ os_cloud_publicnetwork_id }}"
-    os_cloud_publicsubnet_id:     "{{ os_cloud_publicsubnet_id }}"
-    os_cloud_publicsubnet_cidr:   "{{ os_cloud_publicsubnet_cidr }}"
-    os_cloud_privatenetwork_name: "{{ os_cloud_privatenetwork_name }}"
-    os_cloud_privatenetwork_id:   "{{ os_cloud_privatenetwork_id }}"
-    os_cloud_privatesubnet_id:    "{{ os_cloud_privatesubnet_id }}"
-    os_cloud_privatesubnet_cidr:  "{{ os_cloud_privatesubnet_cidr }}"
+      accessIPv4:                 "{{ hostvars[ item ].openstack.public_v4 | default( '' ) }}"
+    publicIPv4:                   "{{ hostvars[ item ].openstack.public_v4 | default( '' ) }}"
+    privateIPv4:                  "{{ hostvars[ item ].openstack.private_v4 | default( '' ) }}"
+    os_cloud_publicnetwork_name:  "{{ os_cloud_publicnetwork_name | default( '' ) }}"
+    os_cloud_publicnetwork_id:    "{{ os_cloud_publicnetwork_id | default( '' ) }}"
+    os_cloud_publicsubnet_id:     "{{ os_cloud_publicsubnet_id | default( '' ) }}"
+    os_cloud_publicsubnet_cidr:   "{{ os_cloud_publicsubnet_cidr | default( '' ) }}"
+    os_cloud_privatenetwork_name: "{{ os_cloud_privatenetwork_name | default( '' ) }}"
+    os_cloud_privatenetwork_id:   "{{ os_cloud_privatenetwork_id | default( '' ) }}"
+    os_cloud_privatesubnet_id:    "{{ os_cloud_privatesubnet_id | default( '' ) }}"
+    os_cloud_privatesubnet_cidr:  "{{ os_cloud_privatesubnet_cidr | default( '' ) }}"
     os_instancename_prefix:       ''
   with_items:                     "{{ groups[ master_role + '-public_nodes' ] }}"
 
@@ -215,7 +219,7 @@
       os_uuid:                      "{{ hostvars[ item ].openstack.id }}"
       os_key_name:                  "{{ os_key_name }}"
       os_instance_tags:             "{{ os_instance_tags }}"
-      ansible_ssh_host:             "{{ ( hostvars[ item ].openstack.networks[ os_cloud_privatenetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
+      ansible_ssh_host:             "{{ hostvars[ item ].openstack.private_v4 | default( '' ) }}"
       openstack:
         accessIPv4:                 "{{ ( hostvars[ item ].openstack.networks[ os_cloud_publicnetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"
       public_v4:                    "{{ ( hostvars[ item ].openstack.networks[ os_cloud_publicnetwork_name ] | default( [] ) )[ 0 ] | default( '' ) }}"

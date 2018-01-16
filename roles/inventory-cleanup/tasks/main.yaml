@@ -72,7 +72,7 @@
     state:                  absent
 
 - name: include role clean up tasks if they exists
-  include:                  "roles/{{ role }}/tasks/cleanup.yaml"
+  include_tasks:            "roles/{{ role }}/tasks/cleanup.yaml"
   with_first_found:
     - files:
       - "roles/{{ role }}/tasks/cleanup.yaml"

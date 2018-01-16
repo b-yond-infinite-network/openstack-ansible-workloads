@@ -1,4 +1,4 @@
-### An ansible template to install and manage Docker installation (latest)
+### An ansible template to install and manage Docker installation (stable)
 
 See [the main documentation](/) for installation instruction and details.
 
@@ -8,7 +8,7 @@ See [the main documentation](/) for installation instruction and details.
 
 ## What does it do ?
 Adding to the basic workload features, this template/recipe add the installation
-and configuration of the docker client on all host.
+and configuration of the docker client on all host using the stable version.
 
 ### Private / public nodes split
 - If don't specify the public_node_count parameters during the deployment, we will
@@ -22,7 +22,7 @@ specified in the public_node_count parameter as private nodes.
 ### Installing/adding docker on 4 nodes:
 * using Ansible:
   ```bash
-  ./openstack-ansible -e os_cloud=<MY_CLOUDS_YAML_PROFILE> -e role=docker -e node_count=4
+  ./openstack-ansible -e os_cloud=<MY_CLOUDS_YAML_PROFILE> -e role=docker-stable -e node_count=4
   ```
 
 # Contributing

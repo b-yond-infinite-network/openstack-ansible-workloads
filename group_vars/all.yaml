@@ -8,12 +8,13 @@ os_instance_tags:               "{{ server_tags         | default( master_role )
 
 #keypair defaulting
 computed_ssh_key_path:          "{{ ( '~' | expanduser ) + '/.ssh/' }}"
-ansible_user:                   root
-ansible_ssh_user:               root
+ansible_user:                   ubuntu
+ansible_ssh_user:               ubuntu
 ansible_ssh_private_key_file:   "{{ computed_ssh_key_path + os_key_name }}"
+#ansible_python_interpreter:     /usr/bin/python3
 
 
 #squid defaults (have to be global to be shared accross all meta-roles)
 proxy_http_port:                3128
-global_dns_server_1:            69.9.191.4
-global_dns_server_2:            69.9.160.191
+global_dns_server_1:            8.8.8.8
+global_dns_server_2:            8.8.4.4

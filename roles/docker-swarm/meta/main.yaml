@@ -1,4 +1,4 @@
 ---
 dependencies:
    - docker
-   - { role: keepalived, when: ( ha is undefined ) or ( ha == true ) }
+   - { role: keepalived, when: ( public_node_number | int ) > 0 and ( ( ha is undefined ) or ( ha == true ) ) }

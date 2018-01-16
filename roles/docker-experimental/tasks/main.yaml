@@ -1,0 +1,147 @@
+---
+# Playbook to ensure docker is installed
+
+- name: add key server
+  apt_key:
+    keyserver:        hkp://keyserver.ubuntu.com:80
+    id:               58118E89F3A912897C070ADBF76221572C52609D
+
+- name: add docker repository
+  apt_repository:
+    repo:             deb https://apt.dockerproject.org/repo ubuntu-xenial main
+    state:            present
+
+- name: update apt repo
+  apt:                update_cache=yes
+  register:           apt_result
+  until:              apt_result|success
+  retries:            3
+  delay:              30
+  ignore_errors:      yes
+  become:             yes
+
+- name: retry if needed using command apt-get update
+  command:            apt-get update
+  when:               apt_result|failed
+  become:             yes
+
+- name: install Docker
+  apt:                pkg={{ item }} state=installed
+  register:           apt_result
+  until:              apt_result|success
+  retries:            3
+  delay:              30
+  ignore_errors:      yes
+  become:             yes
+  notify:             ensure Docker is up
+  with_items:
+    - docker-engine
+    - docker-compose
+
+- name: adding docker group
+  group:
+    name:             docker
+    state:            present
+
+- name: adding docker user
+  user:
+    name:             docker
+    groups:           docker
+    append:           yes
+
+- name: adding root user to group docker
+  user:
+    name:             root
+    groups:           docker
+    append:           yes
+
+- name: install pip
+  apt:                pkg=python-pip state=installed
+  register:           apt_result
+  until:              apt_result|success
+  retries:            3
+  delay:              30
+  ignore_errors:      yes
+  become:             yes
+
+- name: upgrade pip
+  when:               groups[ 'private_nodes' ] is undefined or inventory_hostname not in groups[ 'private_nodes' ]
+  shell:              pip install --upgrade pip
+  register:           pip_upgrade
+  until:              pip_upgrade|success
+  retries:            3
+  delay:              15
+  ignore_errors:      yes
+
+- name: install python docker lib
+  when:               groups[ 'private_nodes' ] is undefined or inventory_hostname not in groups[ 'private_nodes' ]
+  shell:              pip install docker-py
+  register:           pip_result
+  until:              pip_result|success
+  retries:            3
+  delay:              15
+  ignore_errors:      yes
+
+- name: upgrade pip on private hosts
+  when:               groups[ 'private_nodes' ] is defined and inventory_hostname in groups[ 'private_nodes' ]
+  shell:              pip install --upgrade pip #--proxy "{{ proxy_host_privateip }}:{{ proxy_http_port }}"
+  register:           pip_upgrade
+  until:              pip_upgrade|success
+  retries:            3
+  delay:              15
+  ignore_errors:      yes
+
+- name: install python docker lib on private hosts
+  when:               groups[ 'private_nodes' ] is defined and inventory_hostname in groups[ 'private_nodes' ]
+  shell:              pip install docker-py #--proxy "{{ proxy_host_privateip }}:{{ proxy_http_port }}"
+  register:           pip_result
+  until:              pip_result|success
+  retries:            3
+  delay:              15
+  ignore_errors:      yes
+
+# - name: make sure systemd docker directory exists
+#   file:
+#     path:             /etc/systemd/system/docker.service.d
+#     state:            directory
+#
+# - name: enforce private nodes to use proxy for docker registry operations
+#   when:               groups[ 'private_nodes' ] is defined and inventory_hostname in groups[ 'private_nodes' ]
+#   become:             yes
+#   blockinfile:
+#     create:           yes
+#     state:            present
+#     dest:             /etc/systemd/system/docker.service.d/http-proxy.conf
+#     insertafter:      EOF
+#     block:  |
+#                       [Service]
+#                       Environment="HTTP_PROXY=http://{{ proxy_host_privateip }}:{{ proxy_http_port }}"
+#                       Environment="HTTPS_PROXY=https://{{ proxy_host_privateip }}:{{ proxy_http_port }}"
+
+# - name: enforce private nodes to use proxy for all other docker operations
+#   when:               groups[ 'private_nodes' ] is defined and inventory_hostname in groups[ 'private_nodes' ]
+#   become:             yes
+#   blockinfile:
+#     create:           yes
+#     state:            present
+#     dest:             /etc/default/docker
+#     insertafter:      EOF
+#     block:  |
+#                       DOCKER_OPTS="--dns {{ proxy_host_privateip }}"
+#                       export http_proxy="http://{{ proxy_host_privateip }}:{{ proxy_http_port }}/"
+#                       export https_proxy="https://{{ proxy_host_privateip }}:{{ proxy_http_port }}/"
+#                       export HTTP_PROXY="http://{{ proxy_host_privateip }}:{{ proxy_http_port }}/"
+#                       export HTTPS_PROXY="https://{{ proxy_host_privateip }}:{{ proxy_http_port }}/"
+
+- name: add Docker Registry to group 'registry'
+  when:               groups[ 'private_nodes' ] is defined and inventory_hostname in groups[ 'private_nodes' ]
+  add_host:
+     name:            inventory_hostname
+     groups:          docker_nodes
+
+- name: reload dockerd configuration
+  when:               groups[ 'private_nodes' ] is defined and inventory_hostname in groups[ 'private_nodes' ]
+  systemd:
+    state:            restarted
+    daemon_reload:    yes
+    name:             docker
