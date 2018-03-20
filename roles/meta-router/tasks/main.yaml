@@ -101,6 +101,7 @@
 
 - name: enforce ip forward on router node
   when:                       inventory_hostname == router_host
+  become:                     yes
   sysctl:
     name:                     net.ipv4.ip_forward
     value:                    1

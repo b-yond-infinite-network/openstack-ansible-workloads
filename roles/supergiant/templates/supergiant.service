@@ -1,0 +1,9 @@
+[Unit]
+Description=Supergiant Server
+After=syslog.target
+After=network.target
+[Service]
+ExecStart=/usr/bin/supergiant --config-file /etc/supergiant/config.json
+Restart=on-abort
+[Install]
+WantedBy=multi-user.target

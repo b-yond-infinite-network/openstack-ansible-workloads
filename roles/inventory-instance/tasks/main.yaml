@@ -106,6 +106,9 @@
   register:                       created_public_os_instances
     #security_groups:             "{{ master_role }}-public-secgroup"
 
+- debug:
+    msg:  "{{ created_public_os_instances }}"
+
 - name: wait until SSH is available for public nodes
   no_log:                         true
   when:                           os_cloud_publicnetwork_name is defined and item[ 'openstack' ] is defined and item[ 'openstack' ][ 'networks' ]

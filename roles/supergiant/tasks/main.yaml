@@ -1,0 +1,122 @@
+---
+# Playbook to ensure mwc demo back end is installed and configured correctly
+
+- name: supergiant phase
+  run_once:           true
+  debug:              msg="{{ supergiant_lead }} will be the public facing instance, and we will install version {{ supergiant_version }}"
+
+- name: testing if supergiant is installed
+  stat:
+    path:             /usr/bin/supergiant
+  register:           supergiant_exe
+
+- name: testing if supergiant is configured
+  when:               supergiant_exe.stat.exists
+  stat:
+    path:             /etc/supergiant/config.json
+  register:           supergiant_config
+
+- name: testing if supergiant has a password
+  when:               supergiant_exe.stat.exists and supergiant_config.stat.exists
+  stat:
+    path:             /etc/supergiant/config.json
+  register:           supergiant_setuped
+
+- name: downloading supergiant binaries
+  when:               not supergiant_exe.stat.exists
+  become:             true
+  get_url:
+    url:              "{{ supergiant_downloadURL }}"
+    dest:             /usr/bin/supergiant
+
+- name: ensuring supergiant is executable
+  when:               not supergiant_exe.stat.exists
+  become:             true
+  file:
+    dest:             /usr/bin/supergiant
+    mode:             a+x
+
+- name: ensuring configuration directory exists
+  become:             true
+  file:
+    path:             /etc/supergiant
+    state:            directory
+
+
+- name: ensuring proper config
+  become:             true
+  template:
+    src:              config.json
+    dest:             /etc/supergiant/config.json
+    owner:            root
+    group:            root
+    mode:             0751
+
+- name: ensuring database storage directory exists
+  become:             true
+  file:
+    path:             /var/lib/supergiant
+    state:            directory
+
+- name: ensuring log storage directory exists
+  become:             true
+  file:
+    path:             /var/log/supergiant
+    state:            directory
+
+- name: ensuring supergiant is a runnable service
+  become:             true
+  template:
+    src:              supergiant.service
+    dest:             /etc/systemd/system/supergiant.service
+    owner:            root
+    group:            root
+    mode:             0751
+
+
+- name: checking if supergiant already has a password set
+  become:             true
+  stat:
+    path:             /etc/supergiant/admin_pass
+  register:           password_exist
+
+- name: loading supergiant password from file
+  become:             true
+  when:               password_exist.stat.exists
+  shell:              cat /etc/supergiant/admin_pass
+  register:           returned_password
+
+- name: storing supergiant password if it exists
+  become:             true
+  when:               password_exist.stat.exists and returned_password is defined
+  set_fact:
+    supergiant_pwd:   "{{ returned_password.stdout }}"
+
+- name: generating password for supergiant
+  become:             true
+  when:               not password_exist.stat.exists or supergiant_pwd is not defined or supergiant_pwd == ''
+  shell:              supergiant --config-file /etc/supergiant/config.json &
+  register:           commandout
+
+- name: loading supergiant password from prompt
+  when:               not password_exist.stat.exists or supergiant_pwd is not defined or supergiant_pwd == ''
+  set_fact:
+    supergiant_pwd:   "{{ commandout }}"
+
+- name: making sure supergiant password is stored locally
+  become:             true
+  copy:
+    content:          "{{ supergiant_pwd }}"
+    dest:             /etc/supergiant/admin_pass
+    mode:             u=rw
+
+- name: ensuring the service is enabled and running
+  become:             true
+  systemd:
+    name:             supergiant
+    state:            started
+    enabled:          True
+
+- name: credential display
+  run_once:           true
+  debug:              msg="SuperGiant accesible with {{ supergiant_pwd }}"

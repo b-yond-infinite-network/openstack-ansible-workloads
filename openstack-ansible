@@ -60,24 +60,34 @@
     - config/openstack-config.yaml
     - "roles/{{ role }}/defaults/main.yaml"
   roles:
-    - { role: inventory,          when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
+  #  - { role: inventory,          when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
     - { role: meta-bastion,       when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
     - { role: meta-router,        when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
 
+
+- name: "_____________________ Ubuntu python force install  _____________________"
+  hosts:                          "{{ master_role }}"
+  gather_facts:                   no
+  vars:
+    master_role:                  "{{ role }}"
+    playbook_name:                "{{ role }}-ansible"
+  tasks:
+  - name: install python 2
+    raw:                          sudo test -e /usr/bin/python || (sudo apt -y update && sudo apt install -y python-minimal)
+    changed_when:                 False
+
+
 - name: "____________________ Meta-roles remote execution  ______________________"
   hosts:                          "{{ master_role }}"
+  gather_facts:                   no
   vars:
     master_role:                  "{{ role }}"
     playbook_name:                "{{ role }}-ansible"
   vars_files:
     - config/openstack-config.yaml
     - "roles/{{ role }}/defaults/main.yaml"
-  pre_tasks:
-  - name: install python for Ansible everywhere
-    raw: test -e /usr/bin/python || (sudo apt -y update && sudo apt install -y python-minimal)
-    changed_when: False
   roles:
-    - { role: inventory,          when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
+  #  - { role: inventory,          when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
     - { role: meta-bastion,       when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
     - { role: meta-router,        when: "( ( private_node_number | int ) > 0 ) and ( action is undefined or ( action != 'skip_setup' and 'delete' not in action ) )" }
 
@@ -92,11 +102,4 @@
   vars_files:
     - config/openstack-config.yaml
   roles:
-  #  - inventory
     - "{{ role }}"
-  tasks:
-  - name: Merge the two lists
-    set_fact:
-      lists_merged: "{{( 'inventory' + role ) | list }}"
-  - name: Demonstrate merged lists
-    debug: var="{{ lists_merged }}"

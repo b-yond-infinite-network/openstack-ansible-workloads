@@ -26,7 +26,7 @@
     cloud:                        "{{ os_cloud_name }}"
     name:                         "{{ master_role }}-keepalived-port"
     network:                      "{{ os_cloud_publicnetwork_name }}"
-    allowed_address_pairs:        "{{ [ ippairs ] }}"
+    allowed_address_pairs:        "{{ ippairs }}"
     security_groups:              "{{ master_role }}-public-secgroup"
   with_items:                     "{{ groups[ 'public_nodes' ] }}"
 

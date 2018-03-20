@@ -1,0 +1,6 @@
+---
+# Playbook to ensure mwc demo back end is installed and configured correctly
+
+- name: ensure the deploy key is present
+  run_once:           true
+  debug:              msg="{{ os_mwcdemo_lead }} to be the MWC demo leader"

@@ -1,6 +1,12 @@
 #node counting and balancing
-default_public_count:           3
-default_private_count:          0
+default_public_count:           1
+default_private_count:          1
 node_number:                    "{{ node_count                          | default( ( ( public_node_count | default( default_public_count ) ) | int ) + ( ( private_node_count | default( default_private_count ) ) | int ) ) }}"
 public_node_number:             "{{ public_node_count                   | default( ( node_number | int ) - ( ( private_node_count | default( default_private_count ) ) | int ) ) }}"
 private_node_number:            "{{ private_node_count                  | default( ( node_number | int ) - ( ( ( public_node_number > 0 ) | ternary( public_node_number, default_public_count ) ) | int ) ) }}"
+
+supergiant_lead_idx:            0
+supergiant_lead:                "{{ groups[ 'public_nodes' ][ supergiant_lead_idx ] }}"
+supergiant_version:             0.15.6
+supergiant_downloadURL:         "https://github.com/supergiant/supergiant/releases/download/v{{ supergiant_version }}/supergiant-server-linux-amd64"
+supergiant_configdownloadURL:   "https://raw.githubusercontent.com/supergiant/supergiant/master/config/config.json.example"
